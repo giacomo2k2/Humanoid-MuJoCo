@@ -1,5 +1,5 @@
 <mujoco model="g1_29dof_rev_1_0 scene">
-  <include file="g1.xml"/>
+  <include file="g1_v2.xml"/>
 
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0.9 0.9 0.9"/>
@@ -18,4 +18,6 @@
     <light pos="1 0 3.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
   </worldbody>
+
+  <option timestep="0.002"/>
 </mujoco>
