@@ -104,6 +104,99 @@ def save_plots(csv_path, out_dir=None):
     return saved
 
 
+# fixed categorical order: the color follows the controller, never its position in the call
+SERIES_COLORS = {'QP': '#2a78d6', 'PD': '#eb6834'}
+FALLBACK_COLORS = ['#1baf7a', '#6250d6', '#e87ba4', '#008300']
+
+# marker shape = failure mode just above the max impulse (color stays the controller)
+FAILURE_MARKERS = {
+    'tipping': '^',
+    'slip': 's',
+    'tilt': 'D',
+    'fallen': 'v',
+    'body_contact': 'X',
+    'none (cap reached)': 'o',
+}
+
+
+def save_polar_plot(series, out_path, title='Max push impulse on the pelvis', bound=None):
+    """Polar plot of max impulse vs push direction, top view with the robot facing up.
+
+    series: {label: path to a sweep CSV (theta_deg, max_impulse_Ns, ...)}
+    bound:  optional path to a bound CSV (theta_deg, J_bound_Ns), drawn as a dashed reference
+    """
+    import csv
+
+    fig, ax = plt.subplots(figsize=(6.5, 6.5), subplot_kw={'projection': 'polar'})
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+    ax.set_theta_zero_location('N')      # 0 deg (+x, forward) at the top
+    ax.set_theta_direction(1)            # counter-clockwise: +y (left) on the left
+
+    from matplotlib.lines import Line2D
+
+    extra = iter(FALLBACK_COLORS)
+    controller_handles, modes_seen = [], []
+
+    if bound is not None:                # reference first, so the measured data sits on top
+        with open(bound) as f:
+            rows = list(csv.DictReader(f))
+        th = np.radians([float(r['theta_deg']) for r in rows])
+        jb = np.array([float(r['J_bound_Ns']) for r in rows])
+        ax.plot(np.append(th, th[0]), np.append(jb, jb[0]), color=REFERENCE, linewidth=1.5,
+                linestyle='--', zorder=1)
+        controller_handles.append(Line2D([], [], color=REFERENCE, linewidth=1.5, linestyle='--',
+                                         label='capture-point bound (LIPM)'))
+
+    for label, path in series.items():
+        with open(path) as f:
+            rows = list(csv.DictReader(f))
+        th = np.radians([float(r['theta_deg']) for r in rows])
+        imp = np.array([float(r['max_impulse_Ns']) for r in rows])
+        modes = [r['failure_mode'] for r in rows]
+        color = SERIES_COLORS.get(label) or next(extra)
+
+        th_c, imp_c = np.append(th, th[0]), np.append(imp, imp[0])    # close the curve
+        ax.plot(th_c, imp_c, color=color, linewidth=2, zorder=2)
+        ax.fill(th_c, imp_c, color=color, alpha=0.08, linewidth=0)
+
+        for mode in dict.fromkeys(modes):                              # unique, in order
+            sel = np.array([m == mode for m in modes])
+            ax.scatter(th[sel], imp[sel], marker=FAILURE_MARKERS.get(mode, 'P'), s=55,
+                       color=color, edgecolors=SURFACE, linewidths=1.5, zorder=3)   # surface ring
+            if mode not in modes_seen:
+                modes_seen.append(mode)
+        controller_handles.insert(len(controller_handles) - (bound is not None),
+                                  Line2D([], [], color=color, linewidth=2, label=label))
+
+    ax.set_thetagrids([0, 45, 90, 135, 180, 225, 270, 315],
+                      ['0°\nforward', '45°', 'left 90°', '135°', '180°\nback', '225°', '270° right', '315°'],
+                      color=TEXT_2, fontsize=9)
+    ax.set_ylim(bottom=0)
+    ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))   # few radial labels, less clutter
+    ax.tick_params(axis='y', colors=TEXT_2, labelsize=8)
+    ax.set_rlabel_position(157.5)        # radial labels between the left and back axes
+    ax.grid(True, color=GRID, linewidth=0.8)
+    ax.spines['polar'].set_color(GRID)
+    ax.set_title(f'{title}\n', loc='left', color=TEXT, fontsize=12, fontweight='bold')
+    ax.text(0.5, -0.1, 'radius: max impulse [N·s]  ·  angle: push direction (world frame)',
+            transform=ax.transAxes, ha='center', color=TEXT_2, fontsize=9)
+
+    # legend 1: controllers (color); legend 2: failure mode just above the limit (shape, neutral ink)
+    if len(series) > 1 or bound is not None:
+        fig.legend(handles=controller_handles, frameon=False, fontsize=9, labelcolor=TEXT_2,
+                   loc='upper right', bbox_to_anchor=(1.0, 1.0))
+    mode_handles = [Line2D([], [], linestyle='none', marker=FAILURE_MARKERS.get(m, 'P'), markersize=7,
+                           color=TEXT_2, label=m.replace('_', ' ')) for m in modes_seen]
+    ax.legend(handles=mode_handles, title='failure mode above the limit', title_fontsize=9,
+              frameon=False, fontsize=9, labelcolor=TEXT_2, loc='upper center',
+              bbox_to_anchor=(0.5, -0.13), ncol=len(mode_handles))
+
+    fig.savefig(out_path, dpi=150, bbox_inches='tight', facecolor=SURFACE)
+    plt.close(fig)
+    return out_path
+
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         sys.exit(__doc__)

@@ -36,3 +36,8 @@ In the viewer, **Space** starts / pauses the simulation. Results are written to
 Implement a class with `compute(self, t) -> ControlOutput` (it can read `robot.m` / `robot.d`;
 the loop calls it between `mj_step1` and `mj_step2` and clips `tau` to the actuator limits),
 then add it to `main.py`.
+
+
+
+# 0 step capturable limit
+Koolen, de Boer, Rebula, Goswami, Pratt, “Capturability-based analysis and control of legged locomotion, Part 1: Theory and application to three simple gait models

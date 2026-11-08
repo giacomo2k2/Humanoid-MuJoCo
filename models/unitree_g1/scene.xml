@@ -19,5 +19,7 @@
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
   </worldbody>
 
-  <option timestep="0.001" />
+  <option timestep="0.001" cone="elliptic" impratio="10"/>
 </mujoco>
+
+<!-- changed cone type to elliptic and impratio to 10 at 13:33 8/11/2026-->

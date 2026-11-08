@@ -33,7 +33,7 @@ def _zero_offset(t):
 
 class QPController:
     def __init__(self, robot, com_offset=_zero_offset,
-                 mu=0.42, f_min=0.0,
+                 mu=0.42, f_min=5.0,
                  kp_com=100.0, kd_com=20.0, w_com=100.0,
                  kp_ori=100.0, kd_ori=20.0, w_ori=50.0,
                  kp_post=100.0, kd_post=20.0, w_post=1.0,
@@ -97,6 +97,7 @@ class QPController:
         # 5) tau_min <= tau <= tau_max
         C[r:r + self.nu, self.IT] = np.eye(self.nu)
         l[r:r + self.nu], u[r:r + self.nu] = r_.ctrl_lo, r_.ctrl_hi
+        
         r += self.nu
         assert r == self.n_in
         return C, l, u
