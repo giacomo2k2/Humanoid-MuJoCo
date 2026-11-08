@@ -76,7 +76,7 @@ def save_plots(csv_path, out_dir=None):
     for ax, side, color in ((axes[0], 'left', LEFT), (axes[1], 'right', RIGHT)):
         ax.plot(t, L[f'fz_{side}_N'], color=color, linewidth=2, label='simulated')
         ax.plot(t, L[f'fz_{side}_cmd_N'], color=REFERENCE, linewidth=1.5, linestyle='--',
-                label='commanded (pinv)')
+                label='commanded (controller)')
         _style(ax, f'Vertical contact force, {side} foot', 'Fz [N]')
         ax.legend(frameon=False, fontsize=9, labelcolor=TEXT_2, loc='upper right')
     axes[0].set_xlabel('')
@@ -192,6 +192,34 @@ def save_polar_plot(series, out_path, title='Max push impulse on the pelvis', bo
               frameon=False, fontsize=9, labelcolor=TEXT_2, loc='upper center',
               bbox_to_anchor=(0.5, -0.13), ncol=len(mode_handles))
 
+    fig.savefig(out_path, dpi=150, bbox_inches='tight', facecolor=SURFACE)
+    plt.close(fig)
+    return out_path
+
+
+AXIS_COLORS = {'Lx': '#2a78d6', 'Ly': '#eb6834', 'Lz': '#1baf7a'}
+
+
+def save_angular_momentum_plot(csv_path, out_path, push_window=None, title=None):
+    """Whole-body angular momentum about the COM (world frame) vs time.
+
+    csv_path: CSV with time, Lx, Ly, Lz (AngularMomentumLogger)
+    push_window: optional (t_start, t_end) shaded as the push
+    """
+    L = load_log(csv_path)
+    t = L['time']
+    fig, ax = plt.subplots(figsize=(8, 3.8))
+    if push_window is not None:
+        ax.axvspan(*push_window, color=GRID, alpha=0.8, linewidth=0, zorder=0)
+        ax.annotate('push', ((push_window[0] + push_window[1]) / 2, 1.0), xycoords=('data', 'axes fraction'),
+                    xytext=(0, -2), textcoords='offset points', ha='center', va='top',
+                    fontsize=9, color=TEXT_2)
+    ax.axhline(0, color=REFERENCE, linewidth=0.8, zorder=1)
+    names = {'Lx': 'Lx (about x, forward)', 'Ly': 'Ly (about y, left)', 'Lz': 'Lz (about z, vertical)'}
+    for key, label in names.items():
+        ax.plot(t, L[key], color=AXIS_COLORS[key], linewidth=2, label=label, zorder=2)
+    _style(ax, title or 'Angular momentum about the COM (world frame)', 'L [kg·m²/s]')
+    ax.legend(frameon=False, fontsize=9, labelcolor=TEXT_2, loc='upper right')
     fig.savefig(out_path, dpi=150, bbox_inches='tight', facecolor=SURFACE)
     plt.close(fig)
     return out_path

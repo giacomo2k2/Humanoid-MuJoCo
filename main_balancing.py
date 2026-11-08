@@ -1,10 +1,10 @@
-"""Run a controller on the Unitree G1 in MuJoCo and save logs / plots / video.
+"""Balance test: run a controller on the Unitree G1 in MuJoCo and save logs / plots / video.
 
 Examples (from the project root):
-    python main.py                                   # QP, static reference, viewer (Space = start/pause)
-    python main.py --controller QP --ref forward
-    python main.py --controller PD --feedforward gravity
-    MUJOCO_GL=egl python main.py --headless --duration 5      # no window
+    python main_balancing.py                                   # QP, static reference, viewer (Space = start/pause)
+    python main_balancing.py --controller QP --ref forward
+    python main_balancing.py --controller PD --feedforward gravity
+    MUJOCO_GL=egl python main_balancing.py --headless --duration 5      # no window
 
 Results go to results/<name>/ : logs.csv, plots (PNG), video.mp4
 """

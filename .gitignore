@@ -1,3 +1,4 @@
-mujoco_menagerie
-.venv
+.venv/
 __pycache__/
+*.pyc
+mujoco_menagerie/

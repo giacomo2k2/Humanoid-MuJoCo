@@ -1,4 +1,5 @@
 """Per-step metrics, saved to CSV."""
+import mujoco
 import numpy as np
 
 
@@ -26,6 +27,32 @@ class Logger:
                           fz_left_cmd, fz_right_cmd,
                           fz_left, fz_right, fz_left + fz_right, r.mg,
                           int(saturated.sum())))
+
+    def save(self, path):
+        np.savetxt(path, np.array(self.rows), delimiter=',', fmt='%.6g',
+                   header=','.join(self.COLUMNS), comments='')
+
+
+class AngularMomentumLogger:
+    """Whole-body angular momentum about the COM, world frame, every step.
+
+    mj_subtreeVel fills d.subtree_angmom; the pelvis row is the root subtree = the whole robot,
+    taken about its own COM (d.subtree_com[pelvis]). Same log(out) interface as Logger, so it
+    can be passed to run(logger=...).
+    """
+    COLUMNS = ['time', 'Lx', 'Ly', 'Lz']
+
+    def __init__(self, robot):
+        self.robot = robot
+        self.rows = []
+
+    def __len__(self):
+        return len(self.rows)
+
+    def log(self, out=None):
+        m, d = self.robot.m, self.robot.d
+        mujoco.mj_subtreeVel(m, d)                 # MuJoCo computes it only on request
+        self.rows.append((d.time, *d.subtree_angmom[self.robot.pelvis]))
 
     def save(self, path):
         np.savetxt(path, np.array(self.rows), delimiter=',', fmt='%.6g',

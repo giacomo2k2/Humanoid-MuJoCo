@@ -1,6 +1,7 @@
-mujoco
+mujoco>=4.0
 numpy
 scipy
 matplotlib
 mediapy
-proxsuite
+proxsuite>=0.8
+pillow

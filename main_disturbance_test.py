@@ -12,6 +12,7 @@ Examples (from the project root):
 
 theta: push direction in degrees, world frame (0 = +x = forward, 90 = +y = left).
 Viewer: Space starts / pauses. --video saves what the viewer camera sees to results/<name>/video.mp4.
+Always saved to results/<name>/: angular_momentum.csv / .png (whole-body, about the COM, world frame).
 """
 import argparse
 import copy
@@ -24,6 +25,8 @@ from controllers.PD import PDController
 from controllers.QP import QPController
 from utils.detection import (body_contact, detect_fallen, detect_tilt, foot_tipping, slip)
 from utils.disturbance import PUSH_DURATION, PUSH_START, push_force
+from utils.logger import AngularMomentumLogger
+from utils.plotter import save_angular_momentum_plot
 from utils.robot import PROJECT_ROOT, Robot
 from utils.viewer import VideoRecorder, run
 
@@ -69,23 +72,31 @@ class PushOverlay:
             checks[f'tipping, {side} foot (> 5 deg)'] = foot_tipping(d, r, r.m.site_bodyid[s])
         return [name for name, hit in checks.items() if hit]
 
-    def __call__(self, scn, d):
+    def report(self, d):
+        """Print push start / end and new failures. Returns False so it can be run()'s headless
+        `stop` hook without ever stopping the simulation."""
         force = push_force(d.time, self.impulse, self.theta)
-        scn.ngeom = 0
         if np.any(force):
             self._report_once('start', d.time, f'push start: {np.linalg.norm(force):.0f} N for {PUSH_DURATION} s'
                                                f' ({self.impulse:g} N s)')
+        elif d.time >= PUSH_START + PUSH_DURATION:
+            self._report_once('end', d.time, 'push end')
+        for name in self._failures(d):
+            self._report_once(name, d.time, f'FAILURE: {name}')
+        return False
+
+    def __call__(self, scn, d):
+        """Viewer overlay: arrow on the pelvis while the push is active, plus the reports."""
+        force = push_force(d.time, self.impulse, self.theta)
+        scn.ngeom = 0
+        if np.any(force):
             tip = d.xipos[self.robot.pelvis]                    # force acts at the pelvis COM
             tail = tip - force * ARROW_M_PER_N                  # arrow points into the body
             g = scn.geoms[0]
             mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_ARROW, np.zeros(3), np.zeros(3), np.zeros(9), ARROW_RGBA)
             mujoco.mjv_connector(g, mujoco.mjtGeom.mjGEOM_ARROW, 0.03, tail, tip)
             scn.ngeom = 1
-        elif d.time >= PUSH_START + PUSH_DURATION:
-            self._report_once('end', d.time, 'push end')
-
-        for name in self._failures(d):
-            self._report_once(name, d.time, f'FAILURE: {name}')
+        self.report(d)
 
 
 def main():
@@ -101,18 +112,33 @@ def main():
     print(f'{args.controller}: push of {args.impulse:g} N s at {args.theta:g} deg, '
           f't = {PUSH_START}-{PUSH_START + PUSH_DURATION} s.  Space = start / pause.')
     recorder = VideoRecorder(robot.m) if args.video else None
+    angmom = AngularMomentumLogger(robot)
+    overlay = PushOverlay(robot, args.impulse, theta)
     try:
-        run(robot, controller, recorder=recorder, duration=args.duration,
+        run(robot, controller, logger=angmom, recorder=recorder, duration=args.duration,
             disturbance_magnitude=args.impulse, disturbance_theta=theta,
-            overlay=PushOverlay(robot, args.impulse, theta), speed=args.speed, headless=args.headless)
+            overlay=overlay,                                    # viewer: arrow + reports
+            stop=lambda: overlay.report(robot.d),               # headless: reports only
+            speed=args.speed, headless=args.headless)
     finally:
         if recorder is not None:
             recorder.close()
 
+    if len(angmom) == 0:            # viewer closed before pressing Space
+        return
+    name = args.name or f'disturbance_test_{args.controller}_{args.impulse:g}Ns_{args.theta:g}deg'
+    out_dir = PROJECT_ROOT / 'results' / name
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    angmom.save(out_dir / 'angular_momentum.csv')
+    save_angular_momentum_plot(out_dir / 'angular_momentum.csv', out_dir / 'angular_momentum.png',
+                               push_window=(PUSH_START, PUSH_START + PUSH_DURATION),
+                               title=f'Angular momentum about the COM, {args.controller}, '
+                                     f'{args.impulse:g} N·s at {args.theta:g}°')
+    print('saved', out_dir / 'angular_momentum.csv')
+    print('saved', out_dir / 'angular_momentum.png')
+
     if recorder is not None and recorder.frames:
-        name = args.name or f'disturbance_test_{args.controller}_{args.impulse:g}Ns_{args.theta:g}deg'
-        out_dir = PROJECT_ROOT / 'results' / name
-        out_dir.mkdir(parents=True, exist_ok=True)
         media.write_video(out_dir / 'video.mp4', recorder.frames, fps=recorder.fps)
         print('saved', out_dir / 'video.mp4')
 
