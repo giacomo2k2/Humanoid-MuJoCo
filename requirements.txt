@@ -2,6 +2,5 @@ mujoco
 numpy
 scipy
 matplotlib
-osqp
 mediapy
 proxsuite
