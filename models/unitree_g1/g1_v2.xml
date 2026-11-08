@@ -337,6 +337,51 @@
   </sensor>
 
   <keyframe>
-    <key name="stand" qpos="0 0 0.79 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.2 0.2 0 1.28 0 0 0 0.2 -0.2 0 1.28 0 0 0"/>
+    <key name="stand_default"  qpos="0 0 0.79
+                                    1 0 0 0
+                                    0 0 0
+                                    0 0 0
+                                    0 0 0
+                                    0 0 0
+                                    0 0 0
+                                    0.2 0.2 0
+                                    1.28 0 0
+                                    0
+                                    0.2 -0.2 0
+                                    1.28 0 0
+                                    0" />
+  </keyframe>
+
+  <keyframe>
+    <key name="stand_bent" qpos="0 0 0.762  
+                            1 0 0 0   
+                            -0.23 0 0     
+                            0.6 -0.374 0   
+                            -0.23 0 0     
+                            0.6 -0.374 0     
+                            0 0 0     
+                            0.2 0.2 0 
+                            1.28 0 0  
+                            0          
+                            0.2 -0.2 0  
+                            1.28 0 0
+                            0"/>
   </keyframe>
 </mujoco>
+
+
+ <!--
+  1: [0:3] pelvis position
+  2: [3:7] pelvis orientation quaternion
+  3: [7:10] left hip pitch, hip roll, hip yaw
+  4: [10:13] left knee, ankle pitch, ankle roll
+  5: [13:16] right hip pitch, hip roll, hip yaw
+  6: [16:19] right knee, ankle pitch, ankle roll
+  7: [19:22] waist yaw, roll, pitch
+  8: [22:25] left shoulder pitch, roll, yaw
+  9: [25:28] left elbow, wrist roll, pitch
+  10: [28:29] left wrist yaw
+  11: [29:32] right shoulder pitch, roll, yaw
+  12: [32:35] right elbow, wrist roll, pitch
+  13: [35:36] right wrist yaw
+  -->

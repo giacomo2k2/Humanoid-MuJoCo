@@ -19,5 +19,5 @@
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
   </worldbody>
 
-  <option timestep="0.002"/>
+  <option timestep="0.001" />
 </mujoco>
