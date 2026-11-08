@@ -6,11 +6,16 @@ detector in utils/detection.py triggers (fallen, tilt, body contact, foot slip, 
 The max impulse is found by doubling the impulse until the first failure, then bisection
 (this assumes "fails" is monotonic in the impulse).
 
-Examples (from the project root):
-    python main_disturbance_sweep.py                          # QP and PD, 16 directions
-    python main_disturbance_sweep.py --controllers QP --directions 32 --tol 0.25
+QP steps that are not solved are counted per trial (the controller then reuses its previous
+command) and written to the CSV, so solver failures can't silently cause or hide a failure.
 
-Results go to results/<name>/ : sweep_<controller>.csv, push_polar.png
+Examples (from the project root):
+    python main_disturbance_sweep.py                                  # elliptic cone, f_min = 5 N
+    python main_disturbance_sweep.py --cone pyramidal --f-min 0       # the original configuration
+    python main_disturbance_sweep.py --controllers QP --directions 16 --tol 0.25
+
+Results go to results/<name>/ (default name: sweep_<cone>_fmin<f_min>):
+sweep_<controller>.csv, bound.csv, push_polar.png
 """
 import argparse
 import contextlib
@@ -28,22 +33,23 @@ from utils.compute_base_support import compute_base_support
 from utils.detection import detect_failures
 from utils.disturbance import PUSH_DURATION, PUSH_START
 from utils.plotter import save_polar_plot
-from utils.robot import PROJECT_ROOT, Robot
+from utils.robot import CONES, PROJECT_ROOT, Robot
 from utils.viewer import run
 
 T_END = PUSH_START + 2.5          # observe 2.5 s after the push starts
 
 
-def make_controller(name, robot):
+def make_controller(name, robot, f_min):
     if name == 'QP':
-        return QPController(robot)
+        return QPController(robot, f_min=f_min)
     return PDController(robot, feedforward='contact')
 
 
-def trial(controller_name, impulse, theta, keyframe):
-    """One fresh simulation from the keyframe. Returns the failure mode, or None if it survived."""
-    robot = Robot(keyframe=keyframe)
-    controller = make_controller(controller_name, robot)
+def trial(controller_name, impulse, theta, cfg):
+    """One fresh simulation from the keyframe.
+    Returns (failure mode or None if it survived, number of QP steps not solved)."""
+    robot = Robot(keyframe=cfg['keyframe'], cone=cfg['cone'])
+    controller = make_controller(controller_name, robot, cfg['f_min'])
     d0 = copy.copy(robot.d)                       # initial state, reference for the detectors
     result = {'failure': None}
 
@@ -51,85 +57,96 @@ def trial(controller_name, impulse, theta, keyframe):
         result['failure'] = detect_failures(robot.d, robot, d0)
         return result['failure'] is not None
 
-    with contextlib.redirect_stdout(io.StringIO()):   # silence QP warnings while the robot falls
+    with contextlib.redirect_stdout(io.StringIO()):   # QP warnings are counted below instead
         run(robot, controller, headless=True, duration=T_END,
             disturbance_magnitude=impulse, disturbance_theta=theta, stop=stop)
-    return result['failure']
+    return result['failure'], getattr(controller, 'n_solver_failures', 0)
 
 
 def max_impulse(job):
-    """Largest impulse survived in one direction: double until failure, then bisect."""
-    controller_name, theta, keyframe, start, tol, cap = job
+    """Largest impulse survived in one direction: double until failure, then bisect.
+    Also returns the unsolved-QP-step counts of the survived trial and of the failing one."""
+    controller_name, theta, cfg = job
     safe, fail, mode = 0.0, None, None
+    n_safe, n_fail = 0, 0
 
-    impulse = start
-    while impulse <= cap:
-        failure = trial(controller_name, impulse, theta, keyframe)
+    impulse = cfg['start']
+    while impulse <= cfg['cap']:
+        failure, n = trial(controller_name, impulse, theta, cfg)
         if failure is None:
-            safe, impulse = impulse, 2 * impulse
+            safe, n_safe, impulse = impulse, n, 2 * impulse
         else:
-            fail, mode = impulse, failure
+            fail, mode, n_fail = impulse, failure, n
             break
     if fail is None:
-        return theta, safe, 'none (cap reached)'
+        return theta, safe, 'none (cap reached)', n_safe, 0
 
-    while fail - safe > tol:
+    while fail - safe > cfg['tol']:
         mid = 0.5 * (safe + fail)
-        failure = trial(controller_name, mid, theta, keyframe)
+        failure, n = trial(controller_name, mid, theta, cfg)
         if failure is None:
-            safe = mid
+            safe, n_safe = mid, n
         else:
-            fail, mode = mid, failure
-    return theta, safe, mode
+            fail, mode, n_fail = mid, failure, n
+    return theta, safe, mode, n_safe, n_fail
 
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--controllers', nargs='+', choices=['QP', 'PD'], default=['QP', 'PD'])
+    p.add_argument('--cone', choices=list(CONES), help='friction cone of the simulation (default: scene.xml)')
+    p.add_argument('--f-min', type=float, default=5.0, help='QP: minimum normal force per foot sphere [N]')
     p.add_argument('--directions', type=int, default=32, help='number of push directions over 360 deg')
     p.add_argument('--start', type=float, default=2.0, help='first impulse tried [N s]')
     p.add_argument('--tol', type=float, default=0.1, help='bisection tolerance [N s]')
     p.add_argument('--cap', type=float, default=200.0, help='stop doubling above this impulse [N s]')
     p.add_argument('--keyframe', default='stand_bent')
     p.add_argument('--workers', type=int, default=os.cpu_count())
-    p.add_argument('--name', default='disturbance_sweep')
+    p.add_argument('--name', help='results folder (default: sweep_<cone>_fmin<f_min>)')
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-    out_dir = PROJECT_ROOT / 'results' / args.name
+    cone = args.cone or Robot(keyframe=args.keyframe).cone
+    cfg = dict(keyframe=args.keyframe, cone=cone, f_min=args.f_min,
+               start=args.start, tol=args.tol, cap=args.cap)
+    out_dir = PROJECT_ROOT / 'results' / (args.name or f'sweep_{cone}_fmin{args.f_min:g}')
     out_dir.mkdir(parents=True, exist_ok=True)
     thetas = np.linspace(0, 2 * np.pi, args.directions, endpoint=False)
-    print(f'push: {PUSH_DURATION} s at t={PUSH_START} s, observed until t={T_END} s')
+    print(f'{cone} cone, QP f_min = {args.f_min:g} N; push: {PUSH_DURATION} s at t={PUSH_START} s, '
+          f'observed until t={T_END} s')
 
     series = {}
     for name in args.controllers:
-        baseline = trial(name, 0.0, 0.0, args.keyframe)
+        baseline, _ = trial(name, 0.0, 0.0, cfg)
         if baseline is not None:
             print(f'{name}: fails without any push ({baseline}), skipping')
             continue
 
-        jobs = [(name, th, args.keyframe, args.start, args.tol, args.cap) for th in thetas]
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
-            results = list(pool.map(max_impulse, jobs))
+            results = list(pool.map(max_impulse, [(name, th, cfg) for th in thetas]))
 
         csv_path = out_dir / f'sweep_{name}.csv'
         with open(csv_path, 'w', newline='') as f:
             w = csv.writer(f)
-            w.writerow(['theta_deg', 'max_impulse_Ns', 'max_force_N', 'failure_mode'])
-            for th, imp, mode in results:
-                w.writerow([f'{np.degrees(th):.1f}', f'{imp:.3f}', f'{imp / PUSH_DURATION:.1f}', mode])
+            w.writerow(['theta_deg', 'max_impulse_Ns', 'max_force_N', 'failure_mode',
+                        'qp_unsolved_steps_survived', 'qp_unsolved_steps_failed'])
+            for th, imp, mode, n_safe, n_fail in results:
+                w.writerow([f'{np.degrees(th):.1f}', f'{imp:.3f}', f'{imp / PUSH_DURATION:.1f}', mode,
+                            n_safe, n_fail])
         series[name] = csv_path
 
-        print(f'\n{name}: max impulse per direction (failure mode just above it)')
-        for th, imp, mode in results:
-            print(f'  {np.degrees(th):6.1f} deg  {imp:7.2f} N s  ({imp / PUSH_DURATION:7.1f} N)  {mode}')
+        print(f'\n{name}: max impulse per direction (failure mode just above it, unsolved QP steps)')
+        for th, imp, mode, n_safe, n_fail in results:
+            print(f'  {np.degrees(th):6.1f} deg  {imp:7.2f} N s  ({imp / PUSH_DURATION:7.1f} N)  {mode:12s}'
+                  f'  unsolved: {n_safe} survived / {n_fail} failed')
         print('saved', csv_path)
 
     if series:
         bound_path = save_bound(args.keyframe, out_dir / 'bound.csv')
-        path = save_polar_plot(series, out_dir / 'push_polar.png', bound=bound_path)
+        path = save_polar_plot(series, out_dir / 'push_polar.png', bound=bound_path,
+                               title=f'Max push impulse on the pelvis ({cone} cone, f_min = {args.f_min:g} N)')
         print('saved', path)
 
 

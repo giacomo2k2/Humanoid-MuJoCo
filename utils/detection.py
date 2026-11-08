@@ -36,7 +36,7 @@ def detect_failures(d, robot, d0):
     if slip(d, robot, d0):
         return 'slip'
     for s in robot.feet_sites:
-        if foot_tipping(d, robot, robot.m.site_bodyid[s]):
+        if foot_tipping(d, robot, robot.m.site_bodyid[s], d0):
             return 'tipping'
     return None
 
@@ -73,6 +73,7 @@ def slip(d, robot, d0):
     return False
 
 
-def foot_tipping(d, robot, body_id):
-    """Return True if the foot is tipping more than 5° of roll or pitch (sole tilted from flat)."""
-    return _angle(_z_axis(d.xmat[body_id]), np.array([0.0, 0.0, 1.0])) > TIP_MAX
+def foot_tipping(d, robot, body_id, d0):
+    """Return True if the foot has tipped more than 5° in roll or pitch from its initial orientation
+    (the sole's z axis vs the initial one, like tilt and slip compare with d0)."""
+    return _angle(_z_axis(d.xmat[body_id]), _z_axis(d0.xmat[body_id])) > TIP_MAX

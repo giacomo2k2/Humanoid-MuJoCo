@@ -1,5 +1,15 @@
 # Unitree G1 Description (MJCF)
 
+> [!NOTE]
+> **Modified copy for this project.** `g1.xml` is the original MuJoCo Menagerie model, kept for
+> reference. The project uses `g1_v2.xml` (via `scene.xml`): the 30 `<position>` servos are replaced
+> by 29 `<motor>` torque actuators (same torque limits), so the controllers command joint torques
+> directly; the `stand` keyframe is replaced by `stand_default` and `stand_bent` (bent knees).
+> `scene.xml` uses a 1 ms timestep, an elliptic friction cone and `impratio="10"`.
+> The variants with hands, the MJX and mjlab models, the hand meshes and their images were removed;
+> the sections below that mention them refer to the upstream package. The rest of this file is
+> Menagerie's original README.
+
 > [!IMPORTANT]
 > Requires MuJoCo 2.3.4 or later.
 

@@ -69,7 +69,7 @@ class PushOverlay:
                   'body contact with the ground': body_contact(d, r),
                   'slip (foot > 2 cm or 5 deg yaw)': slip(d, r, d0)}
         for side, s in zip(('left', 'right'), r.feet_sites):
-            checks[f'tipping, {side} foot (> 5 deg)'] = foot_tipping(d, r, r.m.site_bodyid[s])
+            checks[f'tipping, {side} foot (> 5 deg)'] = foot_tipping(d, r, r.m.site_bodyid[s], d0)
         return [name for name, hit in checks.items() if hit]
 
     def report(self, d):

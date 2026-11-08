@@ -119,11 +119,12 @@ FAILURE_MARKERS = {
 }
 
 
-def save_polar_plot(series, out_path, title='Max push impulse on the pelvis', bound=None):
+def save_polar_plot(series, out_path, title='Max push impulse on the pelvis', bound=None, colors=None):
     """Polar plot of max impulse vs push direction, top view with the robot facing up.
 
     series: {label: path to a sweep CSV (theta_deg, max_impulse_Ns, ...)}
     bound:  optional path to a bound CSV (theta_deg, J_bound_Ns), drawn as a dashed reference
+    colors: optional {label: color}; default QP blue, PD orange, others in fixed order
     """
     import csv
 
@@ -154,7 +155,7 @@ def save_polar_plot(series, out_path, title='Max push impulse on the pelvis', bo
         th = np.radians([float(r['theta_deg']) for r in rows])
         imp = np.array([float(r['max_impulse_Ns']) for r in rows])
         modes = [r['failure_mode'] for r in rows]
-        color = SERIES_COLORS.get(label) or next(extra)
+        color = (colors or {}).get(label) or SERIES_COLORS.get(label) or next(extra)
 
         th_c, imp_c = np.append(th, th[0]), np.append(imp, imp[0])    # close the curve
         ax.plot(th_c, imp_c, color=color, linewidth=2, zorder=2)

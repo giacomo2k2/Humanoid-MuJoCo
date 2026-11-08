@@ -1,12 +1,14 @@
-"""Regenerate the README GIFs in docs/media/ (headless, no window).
+"""Regenerate the README media in docs/media/ (headless, no window).
 
     MUJOCO_GL=egl python docs/make_media.py
 
-Each clip is simulated with the same loop as the main scripts (utils.viewer.run), recorded with a
+Figures are built from results/ (run the balancing, single-push and the three sweep configurations
+first, see the README). Each GIF clip is simulated with the same loop as the main scripts (utils.viewer.run), recorded with a
 tracking camera; pushes are drawn as a red arrow on the pelvis while they are active.
 """
 import contextlib
 import io
+import shutil
 import sys
 from pathlib import Path
 
@@ -21,6 +23,7 @@ from controllers.base import ControlOutput      # noqa: E402
 from controllers.PD import PDController         # noqa: E402
 from controllers.QP import QPController         # noqa: E402
 from utils.disturbance import push_force        # noqa: E402
+from utils.plotter import save_polar_plot       # noqa: E402
 from utils.robot import Robot                   # noqa: E402
 from utils.viewer import VideoRecorder, run     # noqa: E402
 
@@ -104,8 +107,27 @@ def save_gif(frames, name):
     print(f'saved {path}  ({path.stat().st_size / 1e6:.1f} MB, {len(frames)} frames)')
 
 
+def make_figures():
+    """README figures from the experiment outputs in results/ (run the main scripts first)."""
+    res = ROOT / 'results'
+    sweep = res / 'sweep_elliptic_fmin5'
+    save_polar_plot({'QP': sweep / 'sweep_QP.csv', 'PD': sweep / 'sweep_PD.csv'}, OUT / 'push_polar.png',
+                    bound=sweep / 'bound.csv')
+    configs = {'pyramidal cone, f_min = 0': ('sweep_pyramidal_fmin0', '#8a8985'),
+               'elliptic cone, f_min = 0': ('sweep_elliptic_fmin0', '#eb6834'),
+               'elliptic cone, f_min = 5 N': ('sweep_elliptic_fmin5', '#2a78d6')}
+    save_polar_plot({k: res / f / 'sweep_QP.csv' for k, (f, _) in configs.items()}, OUT / 'findings_qp_fmin.png',
+                    title='QP: friction cone vs f_min', colors={k: c for k, (_, c) in configs.items()})
+    for src, dst in [('test_disturbance_forward_push/angular_momentum.png', 'angmom_forward_qp.png'),
+                     ('test_disturbance_lateral_push/angular_momentum.png', 'angmom_lateral_qp.png'),
+                     ('QP_lateral/foot_vertical_force.png', 'qp_lateral_foot_force.png')]:
+        shutil.copy(res / src, OUT / dst)
+    print(f'saved figures in {OUT}')
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    make_figures()
 
     save_gif(label(simulate(ZeroTorque, 2.0, azimuth=150), 'no control'), 'fall_no_control.gif')
 

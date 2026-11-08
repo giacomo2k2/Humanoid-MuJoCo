@@ -17,6 +17,9 @@ cost  sum_t  w_t || A_t x - b_t ||^2                     (proxsuite form: 1/2 x^
   8) posture             A_t = [S 0 0]       b_t = Kp (q_ref - q) - Kd q_d_joints
   9) force regularization   ||f||^2
  10) torque regularization  ||tau||^2
+
+If a step is not solved (status != PROXQP_SOLVED) the previous command is reused and the step is
+counted in `n_solver_failures`.
 """
 import mujoco
 import numpy as np
@@ -75,6 +78,8 @@ class QPController:
         self.qp.settings.initial_guess = proxsuite.proxqp.InitialGuess.WARM_START_WITH_PREVIOUS_RESULT
         self._initialized = False
         self._J_com_prev = None
+        self.n_solver_failures = 0          # steps where the QP was not solved (previous command reused)
+        self._last_out = None
 
     # ------------------------------------------------------------------ setup
     def _inequalities(self, mu, f_min):
@@ -173,8 +178,12 @@ class QPController:
             self.qp.update(H=H, g=g, A=A, b=b)        # C, l, u are constant
         self.qp.solve()
 
-        if self.qp.results.info.status != proxsuite.proxqp.QPSolverOutput.PROXQP_SOLVED:
-            print(f"t={d.time:.3f}  QP status: {self.qp.results.info.status}")
-
         x = self.qp.results.x
-        return ControlOutput(tau=x[IT].copy(), f=x[IF].copy(), q_ref=self.q_ref)
+        if self.qp.results.info.status != proxsuite.proxqp.QPSolverOutput.PROXQP_SOLVED:
+            # not solved (max iterations, infeasible, ...): count it and reuse the last good command
+            self.n_solver_failures += 1
+            print(f"t={d.time:.3f}  QP status: {self.qp.results.info.status}")
+            if self._last_out is not None:
+                return self._last_out
+        self._last_out = ControlOutput(tau=x[IT].copy(), f=x[IF].copy(), q_ref=self.q_ref)
+        return self._last_out

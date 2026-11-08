@@ -12,9 +12,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCENE_XML = PROJECT_ROOT / 'models' / 'unitree_g1' / 'scene.xml'
 
 
+CONES = {'pyramidal': mujoco.mjtCone.mjCONE_PYRAMIDAL, 'elliptic': mujoco.mjtCone.mjCONE_ELLIPTIC}
+
+
 class Robot:
-    def __init__(self, xml_path=SCENE_XML, keyframe='stand_bent'):
+    def __init__(self, xml_path=SCENE_XML, keyframe='stand_bent', cone=None):
+        """cone: None keeps the friction cone of scene.xml (elliptic), or 'pyramidal' / 'elliptic'."""
         self.m = mujoco.MjModel.from_xml_path(str(xml_path))
+        if cone is not None:
+            self.m.opt.cone = CONES[cone]
+        self.cone = next(k for k, v in CONES.items() if v == self.m.opt.cone)
         self.d = mujoco.MjData(self.m)
         self.key_id = self.m.key(keyframe).id
 
